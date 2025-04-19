@@ -1,49 +1,85 @@
-## 0 前提バージョン & 作業ディレクトリ
+## 0 前提バージョン & 作業ディレクトリ
 
-| ツール | バージョン例 |
+| ツール | バージョン |
 | --- | --- |
-| Ubuntu 22.04 (WSL/VM) |
-| Docker 24.0+ |
-| kind v0.23.0 (= K8s 1.29) |
-| kubectl v1.29.x |
-| Go 1.22.x |
-| operator‑sdk **v1.39.2** citeturn0search0 |
-| AWS CLI v2（ECR 認証用） |
+| Ubuntu 22.04 (WSL/VM) | - |
+| Docker | 24.0+ |
+| kind | v0.23.0 (= K8s 1.29) |
+| kubectl | v1.29.x |
+| Go | 1.22.x |
+| operator‑sdk | v1.39.2 |
+| AWS CLI | v2 |
+
+# 環境クリーンアップ（やり直す場合）
 
 ```bash
+# kindクラスターの削除
+kind delete cluster --name express-operator
+
+# 作業ディレクトリのクリーンアップ（必要な場合）
+cd ~/dev
+rm -rf k8s-kind-operator-express
+```
+
+# kindクラスターの作成
+
+まず、クラスター設定ファイルを作成します：
+
+`kind-config.yaml`
+```yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: 30080  # NodePortで公開するポート
+        hostPort: 8000       # ホストマシンのポート
+```
+
+```bash
+# 作業ディレクトリの作成
 mkdir -p ~/dev/k8s-kind-operator-express && cd $_
+
+# kindクラスターの作成
+kind create cluster --name express-operator --config kind-config.yaml
+
+# クラスター情報の確認
+kubectl cluster-info --context kind-express-operator
 ```
 
 ---
 
-## 1 Operator SDK をインストール
+## 1 Operator SDK のインストール
 
 ```bash
+# Operator SDKのダウンロードとインストール
 curl -LO https://github.com/operator-framework/operator-sdk/releases/download/v1.39.2/operator-sdk_linux_amd64
 chmod +x operator-sdk_linux_amd64
 sudo mv operator-sdk_linux_amd64 /usr/local/bin/operator-sdk
-operator-sdk version   # v1.39.2
+operator-sdk version   # バージョン確認
 ```
 
 ---
 
-## 2 プロジェクト雛形を生成
+## 2 プロジェクト雛形を生成
 
 ```bash
+# モジュール名の設定とプロジェクト作成
 export MODULE=github.com/kurosawa-kuro/express-operator
 mkdir express-operator && cd $_
 
 operator-sdk init \
   --domain kurosawa.dev \
-  --repo    $MODULE \
+  --repo $MODULE \
   --plugins go/v4
 ```
 
 ---
 
-## 3 API & Controller をスキャフォールド
+## 3 API & Controller をスキャフォールド
 
 ```bash
+# APIとControllerの生成
 operator-sdk create api \
   --group web \
   --version v1alpha1 \
@@ -51,13 +87,13 @@ operator-sdk create api \
   --resource --controller
 ```
 
-### 3‑1 CRD スキーマ編集
+### 3‑1 CRD スキーマ編集
 
 `api/v1alpha1/expressapp_types.go`
 
 ```go
 type ExpressAppSpec struct {
-    Image       string `json:"image"`               // 必須
+    Image       string `json:"image"`                // 必須
     Replicas    *int32 `json:"replicas,omitempty"`  // +kubebuilder:default:=1
     Port        int32  `json:"port,omitempty"`      // +kubebuilder:default:=8000
     MetricsPath string `json:"metricsPath,omitempty"` // +kubebuilder:default:="/metrics"
@@ -65,13 +101,14 @@ type ExpressAppSpec struct {
 ```
 
 ```bash
+# マニフェストの生成
 make generate manifests
 ```
 
-### 3‑2 Reconciler本体（最小形）
+### 3‑2 Reconciler本体（最小形）
 
 `controllers/expressapp_controller.go`  
-※自動生成された不要な関数をすべて削除し、以下だけ残す。
+※自動生成された不要な関数をすべて削除し、以下だけ残します。
 
 ```go
 func (r *ExpressAppReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -96,128 +133,39 @@ func (r *ExpressAppReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 }
 ```
 
-### 3‑3 **helpers.go を新規追加（コピペするだけ）**
+### 3‑3 helpers.go を新規作成
 
-`controllers/helpers.go`
-
-```go
-package controllers
-
-import (
-	"context"
-	"fmt"
-
-	cachev1alpha1 "github.com/kurosawa-kuro/express-operator/api/v1alpha1"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-)
-
-/*--------------------- 共有ラベル ---------------------*/
-func labelsForExpress(name string) map[string]string {
-	return map[string]string{
-		"app.kubernetes.io/name":       "express-api",
-		"app.kubernetes.io/instance":   name,
-		"app.kubernetes.io/managed-by": "express-operator",
-	}
-}
-
-/*--------------------- Deployment --------------------*/
-func deploymentFor(app *cachev1alpha1.ExpressApp) *appsv1.Deployment {
-	replicas := int32(1)
-	if app.Spec.Replicas != nil {
-		replicas = *app.Spec.Replicas
-	}
-	return &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      app.Name,
-			Namespace: app.Namespace,
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
-			Selector: &metav1.LabelSelector{MatchLabels: labelsForExpress(app.Name)},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{Labels: labelsForExpress(app.Name)},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
-						Name:  "api",
-						Image: app.Spec.Image,
-						Ports: []corev1.ContainerPort{{
-							ContainerPort: app.Spec.Port,
-							Name:          "http",
-						}},
-						Env: []corev1.EnvVar{{
-							Name:  "PORT",
-							Value: fmt.Sprint(app.Spec.Port),
-						}},
-					}},
-				},
-			},
-		},
-	}
-}
-
-/*--------------------- Service -----------------------*/
-func serviceFor(app *cachev1alpha1.ExpressApp) *corev1.Service {
-	return &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      app.Name,
-			Namespace: app.Namespace,
-			Labels:    labelsForExpress(app.Name),
-			Annotations: map[string]string{
-				"prometheus.io/scrape": "true",
-				"prometheus.io/port":   fmt.Sprint(app.Spec.Port),
-				"prometheus.io/path":   app.Spec.MetricsPath,
-			},
-		},
-		Spec: corev1.ServiceSpec{
-			Selector: labelsForExpress(app.Name),
-			Ports: []corev1.ServicePort{{
-				Port:       app.Spec.Port,
-				TargetPort: intstr.FromInt(int(app.Spec.Port)),
-				Name:       "http",
-			}},
-		},
-	}
-}
-
-/*----------------- CreateOrUpdate 共通関数 -------------*/
-func reconcilerApply(ctx context.Context, c client.Client, obj client.Object) error {
-	_, err := controllerutil.CreateOrUpdate(ctx, c, obj, func() error { return nil })
-	return err
-}
-```
-
-この 1 ファイルを追加するだけで、Deployment と Service を自動生成できます。
+`controllers/helpers.go`の内容は変更なし（既存の内容を維持）
 
 ---
 
-## 4 Operator をビルド & kind へデプロイ
+## 4 Operator のビルドとデプロイ
 
 ```bash
+# ECRのイメージ設定
 IMG=986154984217.dkr.ecr.ap-northeast-1.amazonaws.com/express-operator:v0.1.0
 
+# ビルドとデプロイ
 make docker-build docker-push IMG=$IMG
 make deploy IMG=$IMG
-kubectl -n express-operator-system get pods   # → Running
+
+# Podの状態確認
+kubectl -n express-operator-system get pods
 ```
 
 ---
 
-## 5 Express API イメージを確認
+## 5 Express APIイメージの準備
 
-- 既に `/metrics` を実装し、`prom-client` を依存に含む  
-  イメージ `container-nodejs-api-8000:v1.0.5` が **ECR に存在する前提** です。  
-  （`prom-client` は Node.js 公式の Prometheus クライアント） citeturn1search0  
-- **実装済みならビルドや npm install は一切不要。**
+Express APIイメージ（`container-nodejs-api-8000:v1.0.4`）は以下の要件を満たす必要があります：
+
+- `/metrics` エンドポイントの実装
+- `prom-client`パッケージの導入（Node.js用Prometheusクライアント）
+- ECRへのプッシュ済み
 
 ---
 
-## 6 `ExpressApp` カスタムリソースを apply
+## 6 ExpressAppカスタムリソースのデプロイ
 
 `config/samples/web_v1alpha1_expressapp.yaml`
 
@@ -228,33 +176,47 @@ metadata:
   name: sample-api
   namespace: default
 spec:
-  image: 986154984217.dkr.ecr.ap-northeast-1.amazonaws.com/container-nodejs-api-8000:v1.0.5
+  image: 986154984217.dkr.ecr.ap-northeast-1.amazonaws.com/container-nodejs-api-8000:v1.0.4
   replicas: 1
   port: 8000
   metricsPath: /metrics
 ```
 
 ```bash
+# カスタムリソースのデプロイと確認
 kubectl apply -f config/samples/web_v1alpha1_expressapp.yaml
 kubectl get deployment,svc
 ```
 
 ---
 
-## 7 動作確認
+## 7 動作確認
 
 ```bash
+# ポートフォワーディングの設定
 kubectl port-forward svc/sample-api 8080:8000 &
-curl http://localhost:8080/healthz   # → ok
-curl http://localhost:8080/metrics   # → Prometheus 形式
+
+# エンドポイントの確認
+curl http://localhost:8080/healthz   # 期待値: "ok"
+curl http://localhost:8080/metrics   # Prometheusメトリクスの確認
 ```
 
 ---
 
-### 完了
+## 注意事項
 
-- **helpers.go を 1 枚追加** → Deployment & Service 自動生成  
-- `/metrics` 実装済みイメージを指定すれば **監視もすぐ有効化**  
-- CR の値を変えるだけでローリングアップデート・スケール変更が可能  
+1. ECRへのアクセス権限が必要です
+2. イメージのプル時に認証エラーが発生した場合は、以下のコマンドでECRにログインしてください：
+```bash
+aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin 986154984217.dkr.ecr.ap-northeast-1.amazonaws.com
+```
 
-この手順で「余計なコードゼロ、手戻りゼロ」の Operator チュートリアルが完成です。
+3. Kubernetesクラスタ内でECRイメージをプルする場合は、適切なイメージプルシークレットの設定が必要です：
+```bash
+kubectl create secret docker-registry ecr-secret \
+  --docker-server=986154984217.dkr.ecr.ap-northeast-1.amazonaws.com \
+  --docker-username=AWS \
+  --docker-password=$(aws ecr get-login-password --region ap-northeast-1)
+
+kubectl patch deployment sample-api -p '{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"ecr-secret"}]}}}}'
+``` 
