@@ -1,0 +1,69 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.1
+  name: expressapps.web.kurosawa.dev
+spec:
+  group: web.kurosawa.dev
+  names:
+    kind: ExpressApp
+    listKind: ExpressAppList
+    plural: expressapps
+    singular: expressapp
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ExpressApp is the Schema for the expressapps API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ExpressAppSpec defines the desired state of ExpressApp
+            properties:
+              image:
+                description: Image is the container image to run
+                type: string
+              metricsPath:
+                default: /metrics
+                description: MetricsPath is the path for Prometheus metrics
+                type: string
+              port:
+                default: 8000
+                description: Port is the port number the container will listen on
+                format: int32
+                type: integer
+              replicas:
+                default: 1
+                description: Replicas is the number of desired replicas
+                format: int32
+                type: integer
+            required:
+            - image
+            type: object
+          status:
+            description: ExpressAppStatus defines the observed state of ExpressApp
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
