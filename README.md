@@ -12,6 +12,7 @@
 
 # 環境クリーンアップ（やり直す場合）
 
+
 ```bash
 # kindクラスターの削除
 kind delete cluster --name express-operator
