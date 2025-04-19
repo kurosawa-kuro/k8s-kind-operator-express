@@ -22,7 +22,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	webv1alpha1 "github.com/kurosawa-kuro/express-operator/api/v1alpha1"
 )
@@ -47,10 +46,23 @@ type ExpressAppReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.0/pkg/reconcile
 func (r *ExpressAppReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	var app webv1alpha1.ExpressApp
+	if err := r.Get(ctx, req.NamespacedName, &app); err != nil {
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
 
-	// TODO(user): your logic here
+	deploy := deploymentFor(&app)
+	svc := serviceFor(&app)
 
+	_ = ctrl.SetControllerReference(&app, deploy, r.Scheme)
+	_ = ctrl.SetControllerReference(&app, svc, r.Scheme)
+
+	if err := reconcilerApply(ctx, r.Client, deploy); err != nil {
+		return ctrl.Result{}, err
+	}
+	if err := reconcilerApply(ctx, r.Client, svc); err != nil {
+		return ctrl.Result{}, err
+	}
 	return ctrl.Result{}, nil
 }
 
