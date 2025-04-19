@@ -158,7 +158,7 @@ kubectl -n express-operator-system get pods
 
 # もし Pod が ErrImagePull や ImagePullBackOff 状態の場合:
 # 1. Podの詳細を確認
-kubectl -n express-operator-system describe pod express-operator-controller-manager-xxxxxxxx-xxxxx
+kubectl -n express-operator-system describe pod express-operator-controller-manager-746d8cd5bd-58jfb
 
 # 2. express-operator-system 名前空間にECRのシークレットを作成
 kubectl create secret docker-registry ecr-secret \
@@ -175,7 +175,7 @@ kubectl patch deployment express-operator-controller-manager -n express-operator
 kubectl -n express-operator-system get pods
 
 # 5. 必要に応じてログを確認
-kubectl -n express-operator-system logs express-operator-controller-manager-xxxxxxxx-xxxxx
+kubectl -n express-operator-system logs express-operator-controller-manager-55964866c9-4pl54
 ```
 
 ---

@@ -1,0 +1,23 @@
+# permissions for end users to view expressapps.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: express-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: expressapp-viewer-role
+rules:
+- apiGroups:
+  - web.kurosawa.dev
+  resources:
+  - expressapps
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - web.kurosawa.dev
+  resources:
+  - expressapps/status
+  verbs:
+  - get

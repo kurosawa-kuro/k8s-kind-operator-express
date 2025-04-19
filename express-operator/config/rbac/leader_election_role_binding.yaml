@@ -1,0 +1,13 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: express-operator-leader-election-rolebinding
+  namespace: express-operator-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: express-operator-leader-election-role
+subjects:
+- kind: ServiceAccount
+  name: express-operator-controller-manager
+  namespace: express-operator-system
