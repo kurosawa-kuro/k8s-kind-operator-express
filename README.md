@@ -146,12 +146,36 @@ func (r *ExpressAppReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 # ECRのイメージ設定
 IMG=986154984217.dkr.ecr.ap-northeast-1.amazonaws.com/express-operator:v0.1.0
 
+# ECRへのログイン（ローカルマシン用）
+aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin 986154984217.dkr.ecr.ap-northeast-1.amazonaws.com
+
 # ビルドとデプロイ
 make docker-build docker-push IMG=$IMG
 make deploy IMG=$IMG
 
 # Podの状態確認
 kubectl -n express-operator-system get pods
+
+# もし Pod が ErrImagePull や ImagePullBackOff 状態の場合:
+# 1. Podの詳細を確認
+kubectl -n express-operator-system describe pod express-operator-controller-manager-xxxxxxxx-xxxxx
+
+# 2. express-operator-system 名前空間にECRのシークレットを作成
+kubectl create secret docker-registry ecr-secret \
+  --docker-server=986154984217.dkr.ecr.ap-northeast-1.amazonaws.com \
+  --docker-username=AWS \
+  --docker-password=$(aws ecr get-login-password --region ap-northeast-1) \
+  -n express-operator-system
+
+# 3. デプロイメントにイメージプルシークレットを追加
+kubectl patch deployment express-operator-controller-manager -n express-operator-system \
+  -p '{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"ecr-secret"}]}}}}'
+
+# 4. Podの状態を再確認
+kubectl -n express-operator-system get pods
+
+# 5. 必要に応じてログを確認
+kubectl -n express-operator-system logs express-operator-controller-manager-xxxxxxxx-xxxxx
 ```
 
 ---
@@ -163,6 +187,16 @@ Express APIイメージ（`container-nodejs-api-8000:v1.0.4`）は以下の要�
 - `/metrics` エンドポイントの実装
 - `prom-client`パッケージの導入（Node.js用Prometheusクライアント）
 - ECRへのプッシュ済み
+
+**重要**: Express APIイメージも同様にECR認証が必要です。以下の手順で`default`名前空間にもシークレットを作成してください：
+
+```bash
+# default名前空間にECRのシークレットを作成
+kubectl create secret docker-registry ecr-secret \
+  --docker-server=986154984217.dkr.ecr.ap-northeast-1.amazonaws.com \
+  --docker-username=AWS \
+  --docker-password=$(aws ecr get-login-password --region ap-northeast-1)
+```
 
 ---
 
