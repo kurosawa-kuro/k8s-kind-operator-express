@@ -1,9 +1,0 @@
-apiVersion: web.kurosawa.dev/v1alpha1
-kind: ExpressApp
-metadata:
-  labels:
-    app.kubernetes.io/name: express-operator
-    app.kubernetes.io/managed-by: kustomize
-  name: expressapp-sample
-spec:
-  # TODO(user): Add fields here
