@@ -25,11 +25,20 @@ import (
 
 // ExpressAppSpec defines the desired state of ExpressApp
 type ExpressAppSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Image is the container image to run
+	Image string `json:"image"` // 必須
 
-	// Foo is an example field of ExpressApp. Edit expressapp_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// Replicas is the number of desired replicas
+	// +kubebuilder:default:=1
+	Replicas *int32 `json:"replicas,omitempty"`
+
+	// Port is the port number the container will listen on
+	// +kubebuilder:default:=8000
+	Port int32 `json:"port,omitempty"`
+
+	// MetricsPath is the path for Prometheus metrics
+	// +kubebuilder:default:="/metrics"
+	MetricsPath string `json:"metricsPath,omitempty"`
 }
 
 // ExpressAppStatus defines the observed state of ExpressApp
